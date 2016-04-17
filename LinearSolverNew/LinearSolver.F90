@@ -177,7 +177,13 @@ subroutine jacobiPointSolveOMP
     real*8             ::  solm1  (1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d,1:nVars)
     real*8             ::  l2norm (1:nVars),linfnorm (1:nVars),dsol(1:nVars)
     real*8             ::  rhstmp2(1:nVars)
-    real*8             ::  vec_tmp(1:nVars),sol_tmp(1:nVars)
+    real*8             ::  vec_tmp1(1:nVars)
+    real*8             ::  vec_tmp2(1:nVars) 
+    real*8             ::  vec_tmp3(1:nVars)
+    real*8             ::  vec_tmp4(1:nVars) 
+    real*8             ::  vec_tmp5(1:nVars)
+    real*8             ::  vec_tmp6(1:nVars)       
+    real*8             ::  sol_tmp(1:nVars)
     real*8             ::  Dinv(1:nVars,1:nVars)
     integer            ::  i,j,k,b,iter,v
     !
@@ -188,8 +194,8 @@ subroutine jacobiPointSolveOMP
        l2norm(1:nVars)=0.d0
        !
        !$omp  parallel do        
-       !$omp& shared ( nVars, rhstmp2, solm1, matLHS, vec_tmp)
-       !$omp& private (i,j,k) 
+       !$omp& shared (nVars, rhstmp2, solm1, matLHS)
+       !$omp& private (i,j,k,vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6) 
        do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
           !
           do j=jl_bnd+nguard,ju_bnd-nguard
@@ -201,29 +207,37 @@ subroutine jacobiPointSolveOMP
                 rhstmp2(1:nVars)=rhs(i,j,k,1:nVars)
                 !
                 ! i-1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                vec_tmp1(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i+1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                vec_tmp2(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i,j-1,k
-                vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                vec_tmp3(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i,j+1,k
-                vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                vec_tmp4(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
 #if (iins3d==1)
                 ! i,j,k-1
-                vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                vec_tmp5(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 ! i,j,k+1
-                vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
+                vec_tmp6(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
 #endif
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp2(1:nVars)&
+                                                 -vec_tmp3(1:nVars)&
+                                                 -vec_tmp4(1:nVars)&
+                                                 -vec_tmp5(1:nVars)
+#if (iins3d==1)                                                 
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp6(1:nVars)&
+                                                 -vec_tmp7(1:nVars)
+#endif                
                 !
                 sol_tmp(1:nVars)=matmul(Dinv(1:nVars,1:nVars),rhstmp2(1:nVars))
                 !
