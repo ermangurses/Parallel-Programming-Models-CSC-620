@@ -193,11 +193,11 @@ subroutine jacobiPointSolveOMP
        !
        l2norm(1:nVars)=0.d0
        !
-       !$omp  parallel do        
-       !$omp& shared (nVars, rhstmp2, solm1, matLHS)
-       !$omp& private (i,j,k,vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6) 
        do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
           !
+          !$omp  parallel do        
+          !$omp& shared (nVars, rhstmp2, solm1, matLHS)
+          !$omp& private (i,j,k,vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6) 
           do j=jl_bnd+nguard,ju_bnd-nguard
              !
              do i=il_bnd+nguard,iu_bnd-nguard
@@ -230,13 +230,13 @@ subroutine jacobiPointSolveOMP
                 vec_tmp6(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
                 !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
 #endif
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp2(1:nVars)&
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp1(1:nVars)&
+                                                 -vec_tmp2(1:nVars)&
                                                  -vec_tmp3(1:nVars)&
-                                                 -vec_tmp4(1:nVars)&
-                                                 -vec_tmp5(1:nVars)
+                                                 -vec_tmp4(1:nVars)
 #if (iins3d==1)                                                 
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp6(1:nVars)&
-                                                 -vec_tmp7(1:nVars)
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp5(1:nVars)&
+                                                 -vec_tmp6(1:nVars)
 #endif                
                 !
                 sol_tmp(1:nVars)=matmul(Dinv(1:nVars,1:nVars),rhstmp2(1:nVars))
@@ -254,8 +254,8 @@ subroutine jacobiPointSolveOMP
                 !
              end do
           end do
-       end do
        !$omp end parallel do  
+       end do
        !
        call exchange_ghosts
        !
