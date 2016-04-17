@@ -2,14 +2,16 @@
 program linSolve
   !
   use omp_lib
-  use FTTimerClass
+  !use FTTimerClass
   use dimensions
   use LinearSolver, only: sol,assignSol,assignRHS,assignLHS,solve,solveLinearSystem_ini,&
                           error,errorOutput,evaluateRHS,rhs
   !
   implicit none
   !
-  TYPE(FTTimer)  ::     Timer
+  !TYPE(FTTimer)  ::     Timer
+  Real*8         ::     fstart, fend
+  Real*8         ::     ostart,oend  
   Integer        ::     k,ioerror,scheme
   Integer        ::     maxIterations
   Real*8         ::     errorTolerance
@@ -112,13 +114,22 @@ program linSolve
   ! solve linear system
   write(*,'(A)') "[I] Solve linear system"
 #if (RHSTEST==0)
-  call omp_set_num_threads( 2 )
+  call omp_set_num_threads( omp_get_max_threads ( ) )
   write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
   write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
-  call Timer % start()
+!  call Timer % start()
+   call cpu_time (fstart)
+   ostart = omp_get_wtime() 
+   !
    call solve(scheme)
-  call Timer % stop()  
-  write(*,'(A,F17.8,A)') "[T] LinSolve took ",Timer%elapsedTime(TC_SECONDS) 
+   !
+   call cpu_time (fend)
+   oend = omp_get_wtime() 
+   write(*,*) 'Fortran CPU time elapsed', fend-fstart
+   write(*,*) 'OpenMP Walltime elapsed', oend-ostart 
+  !
+!  call Timer % stop()  
+!  write(*,'(A,F17.8,A)') "[T] LinSolve took ",Timer%elapsedTime(TC_SECONDS) 
 #endif
   !
   ! output results to tecplot file

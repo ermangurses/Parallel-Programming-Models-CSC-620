@@ -1,4 +1,4 @@
-1              #1: Point-Solve, 2: Line-Solve 3:Point-SolveOMP
+3              #1: Point-Solve, 2: Line-Solve 3:Point-SolveOMP
 1,1,1,1,1,1    #boundary condition type left,right,bottom,top,front,back
 4              #number of variables
 1.0,1.0,1.0    #Lx,Ly,Lz

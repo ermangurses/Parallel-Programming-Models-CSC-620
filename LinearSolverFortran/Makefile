@@ -29,7 +29,7 @@ FCOMPL77 = gfortran
 	${FCOMPL77} ${FFLAG} -c ${LIBS} $<
 
 #----------------------------------------------------------------------------------------------------------------------------------#
-MODULES = dimensions.o LinearSolver.o timerClass.o\
+MODULES = dimensions.o LinearSolver.o #timerClass.o\
 
 FILES   = linSolve.o output.o \
 

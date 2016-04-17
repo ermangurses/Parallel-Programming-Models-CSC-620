@@ -116,14 +116,13 @@ contains
        l2norm(1:nVars)=0.d0
        !
        !
+         !$omp  parallel do        
+         !$omp& shared ( nVars, rhstmp2,solm1,matLHS,vec_tmp2, vec_tmp3,vec_tmp4, vec_tmp5, vec_tmp6, vec_tmp7)
+         !$omp& private (j) 
        do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
           !         
-          !$omp  parallel do        
-           !$omp& shared ( nVars, rhstmp2,solm1,matLHS,vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6, vec_tmp7)
-         !$omp& private (i,j,k)                            
           do j=jl_bnd+nguard,ju_bnd-nguard
              !   
-             !mat2(il_bnd:iu_bnd,1:nVars,1:nVars)=matLHS(2,il_bnd:iu_bnd,j,k,1:nVars,1:nVars)
              do i=il_bnd+nguard,iu_bnd-nguard
                 ! invert diagonal block
                 call inv(matLHS(1,i,j,k,1:nVars,1:nVars),Dinv(1:nVars,1:nVars),nVars)
@@ -179,8 +178,8 @@ contains
                 !
              end do
           end do  
-          !$omp end parallel do  
-       end do                                           
+       end do
+       !$omp end parallel do 
        !
        call exchange_ghosts
        !
