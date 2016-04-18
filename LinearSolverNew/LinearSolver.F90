@@ -187,6 +187,9 @@ subroutine jacobiPointSolveOMP
     real*8             ::  Dinv(1:nVars,1:nVars)
     integer            ::  i,j,k,b,iter,v
     !
+    call omp_set_num_threads( omp_get_max_threads ( ) )
+    write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
+    write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
     do iter=1,maxIt
        !
        solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)

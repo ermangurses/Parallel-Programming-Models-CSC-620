@@ -112,9 +112,6 @@ program linSolve
   ! solve linear system
   write(*,'(A)') "[I] Solve linear system"
 #if (RHSTEST==0)
-   call omp_set_num_threads( omp_get_max_threads ( ) )
-   write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
-   write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
    call cpu_time (fstart)
    ostart = omp_get_wtime()
    !
