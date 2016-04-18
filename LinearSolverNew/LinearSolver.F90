@@ -203,7 +203,7 @@ subroutine jacobiPointSolveOMP
        !
        l2norm(1:nVars)=0.d0
        !
-         !$omp& shared (nVars, rhstmp2, solm1, matLHS)
+         !$omp& shared (nVars, rhstmp2, solm1, matLHS, Dinv)
           !$omp& private (i,j,k,vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6)        
        do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
           !
