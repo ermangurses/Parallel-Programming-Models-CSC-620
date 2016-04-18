@@ -68,19 +68,28 @@ contains
     !
     implicit none
     !
+    Real*8         ::     fstart, fend
+    Real*8         ::     ostart,oend  
     Integer,intent(in)    ::    scheme
     !
     if (scheme.eq.1) then
-       !
+       call cpu_time (fstart)
        call jacobiPointSolve
-       !
+       call cpu_time (fend)
+       write(*,*) 'Fortran CPU time elapsed', fend-fstart
     else if (scheme.eq.2) then
        !
        call jacobiLineSolve
        !
     else if (scheme.eq.3) then	
        !
-       call jacobiPointSolveOMP       
+       call omp_set_num_threads( omp_get_max_threads ( ) )
+       write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
+       write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
+       ostart = omp_get_wtime()
+       call jacobiPointSolveOMP
+       oend = omp_get_wtime() 
+       write(*,*) 'OpenMP Walltime elapsed', oend-ostart  
     else
        !
        write(*,'(A,I2)') "[E] LinearSolve::solve: Linear solver not supported! scheme = ",scheme
@@ -188,9 +197,6 @@ subroutine jacobiPointSolveOMP
     real*8             ::  Dinv(1:nVars,1:nVars)
     integer            ::  i,j,k,b,iter,v
     !
-    call omp_set_num_threads( omp_get_max_threads ( ) )
-    write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
-    write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
     do iter=1,maxIt
        !
        solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
