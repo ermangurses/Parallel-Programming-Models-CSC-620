@@ -1,6 +1,7 @@
 #include "setup.h"
 module LinearSolver
   !
+  use omp_lib  
   use dimensions, only: coords,Lx,Ly,Lz,&
        dx,dy,dz,nguard,&
        nxb,nyb,nzb,&
