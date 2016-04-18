@@ -1,7 +1,6 @@
 #include "setup.h"
 module LinearSolver
   !
-  use omp_lib  
   use dimensions, only: coords,Lx,Ly,Lz,&
        dx,dy,dz,nguard,&
        nxb,nyb,nzb,&
@@ -14,10 +13,10 @@ module LinearSolver
   Logical                                      ::      errorOutput
   Integer                                      ::      maxIt,maxN,nVars,funitLin
   Real*8                                       ::      relaxFactor,errTol=1e-6
-  Real*8,dimension(:,:,:,:,:,:),allocatable    ::      matLHS!(1:5+2*iins3d,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars,1:nVars)  
-  Real*8,dimension(:,:,:,:),allocatable        ::      rhs!(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars)
-  Real*8,dimension(:,:,:,:),allocatable        ::      sol!(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars)
-  Real*8,dimension(:,:,:,:),allocatable        ::      error!(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars)
+  Real*8,dimension(:,:,:,:,:,:),allocatable    ::      matLHS!(1:nVars,1:nVars,1:5+2*iins3d,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)  
+  Real*8,dimension(:,:,:,:),allocatable        ::      rhs!(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
+  Real*8,dimension(:,:,:,:),allocatable        ::      sol!(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
+  Real*8,dimension(:,:,:,:),allocatable        ::      error!(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
   !
   private 
   !
@@ -51,10 +50,10 @@ contains
     maxN=max(MaxN,nz)
 #endif
     !
-    allocate(matLHS(1:5+2*iins3d,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars,1:nVars))
-    allocate(rhs(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars))
-    allocate(sol(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars))
-    if (errorOutput) allocate(error(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars))
+    allocate(matLHS(1:nVars,1:nVars,1:5+2*iins3d,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd))
+    allocate(rhs(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd))
+    allocate(sol(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd))
+    if (errorOutput) allocate(error(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd))
     !
 #if (OUTPUTRES==1)
     funitLin=101
@@ -68,28 +67,16 @@ contains
     !
     implicit none
     !
-    Real*8         ::     fstart, fend
-    Real*8         ::     ostart,oend  
     Integer,intent(in)    ::    scheme
     !
     if (scheme.eq.1) then
-       call cpu_time (fstart)
+       !
        call jacobiPointSolve
-       call cpu_time (fend)
-       write(*,*) 'Fortran CPU time elapsed', fend-fstart
+       !
     else if (scheme.eq.2) then
        !
        call jacobiLineSolve
        !
-    else if (scheme.eq.3) then	
-       !
-       call omp_set_num_threads( 2 )
-       write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
-       write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
-       ostart = omp_get_wtime()
-       call jacobiPointSolveOMP
-       oend = omp_get_wtime() 
-       write(*,*) 'OpenMP Walltime elapsed', oend-ostart  
     else
        !
        write(*,'(A,I2)') "[E] LinearSolve::solve: Linear solver not supported! scheme = ",scheme
@@ -102,7 +89,7 @@ contains
   subroutine jacobiPointSolve
     !
     implicit none
-    real*8             ::  solm1  (1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d,1:nVars)
+    real*8             ::  solm1  (1:nVars,1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d)
     real*8             ::  l2norm (1:nVars),linfnorm (1:nVars),dsol(1:nVars)
     real*8             ::  rhstmp2(1:nVars)
     real*8             ::  vec_tmp(1:nVars),sol_tmp(1:nVars)
@@ -111,7 +98,7 @@ contains
     !
     do iter=1,maxIt
        !
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
        !
        l2norm(1:nVars)=0.d0
        !
@@ -121,38 +108,38 @@ contains
              !
              do i=il_bnd+nguard,iu_bnd-nguard
                 ! invert diagonal block
-                call inv(matLHS(1,i,j,k,1:nVars,1:nVars),Dinv(1:nVars,1:nVars),nVars)
+                call inv(matLHS(1:nVars,1:nVars,1,i,j,k),Dinv(1:nVars,1:nVars),nVars)
                 ! compute modified rhs
-                rhstmp2(1:nVars)=rhs(i,j,k,1:nVars)
+                rhstmp2(1:nVars)=rhs(1:nVars,i,j,k)
                 !
                 ! i-1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i+1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i,j-1,k
-                vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
                 ! i,j+1,k
-                vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 !
 #if (iins3d==1)
                 ! i,j,k-1
-                vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
                 ! i,j,k+1
-                vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
                 rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
 #endif
                 !
                 sol_tmp(1:nVars)=matmul(Dinv(1:nVars,1:nVars),rhstmp2(1:nVars))
                 !
-                dsol(1:nVars)=sol_tmp(1:nVars)-solm1(i,j,k,1:nVars)
+                dsol(1:nVars)=sol_tmp(1:nVars)-solm1(1:nvars,i,j,k)
                 !
 #if (OUTPUTRES==1)
                 do v=1,nVars
@@ -161,7 +148,7 @@ contains
                 enddo
 #endif
                 !
-                sol (i,j,k,1:nVars)=solm1(i,j,k,1:nVars)+relaxFactor*dsol(1:nVars)
+                sol (1:nvars,i,j,k)=solm1(1:nvars,i,j,k)+relaxFactor*dsol(1:nVars)
                 !
              end do
           end do
@@ -178,126 +165,15 @@ contains
 #endif
        !
     enddo
+    
     !
   end subroutine jacobiPointSolve
-   
-subroutine jacobiPointSolveOMP
-    !
-    implicit none
-    real*8             ::  solm1  (1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d,1:nVars)
-    real*8             ::  l2norm (1:nVars),linfnorm (1:nVars),dsol(1:nVars)
-    real*8             ::  rhstmp2(1:nVars)
-    real*8             ::  vec_tmp1(1:nVars)
-    real*8             ::  vec_tmp2(1:nVars) 
-    real*8             ::  vec_tmp3(1:nVars)
-    real*8             ::  vec_tmp4(1:nVars) 
-    real*8             ::  vec_tmp5(1:nVars)
-    real*8             ::  vec_tmp6(1:nVars)       
-    real*8             ::  sol_tmp(1:nVars)
-    real*8             ::  Dinv(1:nVars,1:nVars)
-    real*8             ::  Bmat(1:nVars,1:nVars),vec(1:nVars)    
-    integer            ::  i,j,k,b,iter,v
-    !
-    Bmat=0.
-    Dinv=0.
-    do k=1,nvars
-        Bmat(k,k)=1.d0
-        Dinv(k,k)=1.d0
-    enddo     
-    vec(1:nVars)=1.
-    do iter=1,maxIt
-       !
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
-       !
-       l2norm(1:nVars)=0.d0
-       !
-         !$omp& shared (nVars, rhstmp2, solm1, matLHS)
-          !$omp& private (i,j,k, Dinv,Bmat,vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6)        
-       do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
-          !
-          !$omp  parallel do        
-          do j=jl_bnd+nguard,ju_bnd-nguard
-             !
-             do i=il_bnd+nguard,iu_bnd-nguard
-                ! invert diagonal block
-                !call inv(matLHS(1:nVars,1:nVars,1,i,j,k),Dinv(1:nVars,1:nVars),nVars)
-                call inv(Bmat(1:nvars,1:nVars),Dinv(1:nVars,1:nVars),nVars)
-                ! compute modified rhs
-                rhstmp2(1:nVars)=rhs(i,j,k,1:nVars)
-                !
-                ! i-1,j,k
-                !vec_tmp1(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
-                vec_tmp1(1:nVars)=matmul(Bmat(1:nVars,1:nVars),vec(1:nVars))
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
-                !
-                ! i+1,j,k
-                !vec_tmp2(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
-                vec_tmp2(1:nVars)=matmul(Bmat(1:nVars,1:nVars),vec(1:nVars))                
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
-                !
-                ! i,j-1,k
-                !vec_tmp3(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
-                vec_tmp3(1:nVars)=matmul(Bmat(1:nVars,1:nVars),vec(1:nVars))                
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
-                !
-                ! i,j+1,k
-                !vec_tmp4(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
-                vec_tmp4(1:nVars)=matmul(Bmat(1:nVars,1:nVars),vec(1:nVars))                
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
-                !
-#if (iins3d==1)
-                ! i,j,k-1
-                vec_tmp5(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
-                ! i,j,k+1
-                vec_tmp6(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
-                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
-#endif
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp1(1:nVars)&
-                                                 -vec_tmp2(1:nVars)&
-                                                 -vec_tmp3(1:nVars)&
-                                                 -vec_tmp4(1:nVars)
-#if (iins3d==1)                                                 
-                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp5(1:nVars)&
-                                                 -vec_tmp6(1:nVars)
-#endif                
-                !
-                sol_tmp(1:nVars)=matmul(Dinv(1:nVars,1:nVars),rhstmp2(1:nVars))
-                !
-                dsol(1:nVars)=sol_tmp(1:nVars)-solm1(i,j,k,1:nVars)
-                !
-#if (OUTPUTRES==1)
-                do v=1,nVars
-                   l2norm  (v)=l2norm  (v)+dsol(v)*dsol(v)
-!                   linfnorm(v)=max(linfnorm(v),abs(dsol(v)))
-                enddo
-#endif
-                !
-                sol (i,j,k,1:nVars)=solm1(i,j,k,1:nVars)+relaxFactor*dsol(1:nVars)
-                !
-             end do
-          end do
-       !$omp end parallel do  
-       end do
-       !
-       call exchange_ghosts
-       !
-#if (OUTPUTRES==1)
-       do v=1,nVars
-          l2norm  (v)=sqrt(l2norm(v)/nVars)
-       enddo
-       !
-       write(funitLin,*) iter,l2norm(1:nVars)!,linfnorm(1:nVars)
-#endif
-       !
-    enddo
-    !
-  end subroutine jacobiPointSolveOMP
+
   !
   subroutine jacobiLineSolve
     !
     implicit none
-    Real*8             ::  solm1  (1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d,1:nVars)
+    Real*8             ::  solm1  (1:nVars,1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d)
     Real*8             ::  l2norm (1:nVars),linfnorm (1:nVars),dsol(1:nVars)
     Real*8             ::  rhstmp2(1:nVars,1:maxN)
     Real*8             ::  vec_tmp(1:nVars)
@@ -307,7 +183,7 @@ subroutine jacobiPointSolveOMP
     !
     do iter=1,maxIt
        !
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
        !
        l2norm(1:nVars)=0.d0
        !
@@ -326,27 +202,27 @@ subroutine jacobiPointSolveOMP
              count=1 
              i=il_bnd+nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(2,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(3,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,2,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,3,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
              !
 #if (iins3d==1)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
              !
@@ -354,23 +230,23 @@ subroutine jacobiPointSolveOMP
              !
              do i=il_bnd+nguard+1,iu_bnd-nguard-1
                 ! 
-                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(2,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(3,i,j,k,1:nVars,1:nVars)
+                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,2,i,j,k)
+                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,3,i,j,k)
                 !
-                rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
-                vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+                rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 !
-                vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                      
                 !
 #if (iins3d==1)
                 ! i,j,k-1
-                vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 ! i,j,k+1
-                vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
                 !
@@ -380,26 +256,26 @@ subroutine jacobiPointSolveOMP
              !
              i=iu_bnd-nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(2,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(3,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,2,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,3,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                                                         
 #if (iins3d==1)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
              !
@@ -415,9 +291,9 @@ subroutine jacobiPointSolveOMP
              count=1
              do i=il_bnd+nguard,iu_bnd-nguard
                 !
-                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(i,j,k,1:nVars)
+                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(1:nvars,i,j,k)
                 !
-                sol (i,j,k,1:nVars)=solm1(i,j,k,1:nVars)+relaxFactor*dsol(1:nVars)
+                sol (1:nvars,i,j,k)=solm1(1:nvars,i,j,k)+relaxFactor*dsol(1:nVars)
                 !
 #if (OUTPUTRES==1)
                 do v=1,nVars
@@ -444,7 +320,7 @@ subroutine jacobiPointSolveOMP
        !
        call exchange_ghosts
        !
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
        !
 #if (OUTPUTRES==1)
        l2norm(1:nVars)=0.d0
@@ -465,27 +341,27 @@ subroutine jacobiPointSolveOMP
              count=1 
              j=jl_bnd+nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(4,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(5,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,4,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,5,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(2:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
              !
 #if (iins3d==1)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
              !
@@ -493,23 +369,23 @@ subroutine jacobiPointSolveOMP
              !
              do j=jl_bnd+nguard+1,ju_bnd-nguard-1
                 ! 
-                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(4,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(5,i,j,k,1:nVars,1:nVars)
+                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,4,i,j,k)
+                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,5,i,j,k)
                 !
-                rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+                rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
                 ! i-1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 ! i+1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #if (iins3d==1)
                 ! i,j,k-1
-                vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 ! i,j,k+1
-                vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
                 !
@@ -519,27 +395,27 @@ subroutine jacobiPointSolveOMP
              !
              j=ju_bnd-nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(4,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(5,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,4,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,5,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nvars,1:nvars,2,i,j,k),solm1(1:nVars,i-1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                                                         
              !
 #if (iins3d==1)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
 #endif
              !
@@ -555,7 +431,7 @@ subroutine jacobiPointSolveOMP
              count=1
              do j=jl_bnd+nguard,ju_bnd-nguard
                 !
-                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(i,j,k,1:nVars)
+                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(1:nvars,i,j,k)
                 !
 #if (OUTPUTRES==1)
                 do v=1,nVars
@@ -564,7 +440,7 @@ subroutine jacobiPointSolveOMP
                 enddo
 #endif
                 !
-                sol (i,j,k,1:nVars)=solm1(i,j,k,1:nVars)+relaxFactor*dsol(1:nVars)
+                sol (1:nvars,i,j,k)=solm1(1:nvars,i,j,k)+relaxFactor*dsol(1:nVars)
                 !
                 count=count+1
                 !
@@ -577,7 +453,7 @@ subroutine jacobiPointSolveOMP
        !     
       call exchange_ghosts
       !
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
        !
 #if (iins3d==1)
        !
@@ -597,47 +473,47 @@ subroutine jacobiPointSolveOMP
              count=1 
              k=kl_bnd+nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(6,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(7,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,6,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,7,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),solm1(i,j,k-1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
              !
              count=2
              !
              do k=kl_bnd+nguard*iins3d+1,ku_bnd-nguard*iins3d-1
                 ! 
-                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(6,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(7,i,j,k,1:nVars,1:nVars)
+                CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,6,i,j,k)
+                CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+                CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,7,i,j,k)
                 !
-                rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+                rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
                 ! i-1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 ! i+1,j,k
-                vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
                 ! i,j-1,k
-                vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
                 ! i,j+1,k
-                vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+                vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
                 rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
                 !
                 count=count+1
@@ -646,25 +522,25 @@ subroutine jacobiPointSolveOMP
              !
              k=ku_bnd-nguard
              !
-             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(6,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1,i,j,k,1:nVars,1:nVars)
-             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(7,i,j,k,1:nVars,1:nVars)
+             CoefMat_loc(1,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,6,i,j,k)
+             CoefMat_loc(2,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,1,i,j,k)
+             CoefMat_loc(3,1:nVars,1:nVars,count)=matLHS(1:nVars,1:nVars,7,i,j,k)
              !
-             rhstmp2(1:nVars,count)=rhs(i,j,k,1:nVars)
+             rhstmp2(1:nVars,count)=rhs(1:nVars,i,j,k)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),solm1(i,j,k+1,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),solm1(i-1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),solm1(i+1,j,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                                                         
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),solm1(i,j-1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),solm1(i,j+1,k,1:nVars))
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
              rhstmp2(1:nVars,count)=rhstmp2(1:nVars,count)-vec_tmp(1:nVars)                   
              !
              numPts=count
@@ -679,7 +555,7 @@ subroutine jacobiPointSolveOMP
              count=1
              do k=kl_bnd+nguard,ku_bnd-nguard
                 !
-                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(i,j,k,1:nVars)
+                dsol(1:nVars)=sol_tmp(1:nVars,count)-solm1(1:nvars,i,j,k)
                 !
 #if (OUTPUTRES==1)
                 do v=1,nVars
@@ -688,7 +564,7 @@ subroutine jacobiPointSolveOMP
                 enddo
 #endif
                 !
-                sol (i,j,k,1:nVars)=solm1(i,j,k,1:nVars)+relaxFactor*dsol(1:nVars)
+                sol (1:nvars,i,j,k)=solm1(1:nvars,i,j,k)+relaxFactor*dsol(1:nVars)
                 !
                 count=count+1
                 !
@@ -700,7 +576,7 @@ subroutine jacobiPointSolveOMP
        !       end do
        !
        call exchange_ghosts
-       solm1(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)=sol(1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d,1:nVars)
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
        !
 #endif       
        !
@@ -994,14 +870,14 @@ subroutine jacobiPointSolveOMP
              rdy2=1.d0/(dy*dy)
              rdz2=1.d0/(dz*dz)
              !
-             matLHS(1:5+iins3d*2,i,j,k,1:nVars,1:nVars)=0.
+             matLHS(1:nVars,1:nvars,1:5+iins3d*2,i,j,k)=0.
              do d=1,nVars
                 !                      
-                matLHS(1  ,i,j,k,d,d)=-2.d0*rdx2-2.d0*rdy2-dble(iins3d)*2.d0*rdz2
-                matLHS(2:3,i,j,k,d,d)=1.d0*rdx2
-                matLHS(4:5,i,j,k,d,d)=1.d0*rdy2
-#if (iins3d==1)
-                matLHS(6:7,i,j,k,d,d)=1.d0*rdz2
+                matLHS(d,d,1  ,i,j,k)=-2.d0*rdx2-2.d0*rdy2-dble(iins3d)*2.d0*rdz2
+                matLHS(d,d,2:3,i,j,k)=1.d0*rdx2
+                matLHS(d,d,4:5,i,j,k)=1.d0*rdy2
+#if (iins3d==1)        
+                matLHS(d,d,6:7,i,j,k)=1.d0*rdz2
 #endif
                 !
              end do
@@ -1033,8 +909,8 @@ subroutine jacobiPointSolveOMP
              !
              xyz(1:3)=coords(i,j,k,1:3)
              !
-             !call userSpecifiedFunction(sol(i,j,k,1:nVars),nVars,xyz(1:3),Lx,Ly,Lz)
-             sol(i,j,k,1:nVars)=0.
+!             call userSpecifiedFunction(sol(1:nvars,i,j,k),nVars,xyz(1:3),Lx,Ly,Lz)
+             sol(1:nvars,i,j,k)=0.
           end do
        end do
     end do
@@ -1094,10 +970,10 @@ subroutine jacobiPointSolveOMP
              !                   
              xyz_eps=xyz
 ! 
-! rhs(i,j,k,1:nVars)=-8.d0*pi*pi*sin(2.d0*pi*xyz(1))*sin(2.d0*pi*xyz(2))
+! rhs(1:nVars,i,j,k)=-8.d0*pi*pi*sin(2.d0*pi*xyz(1))*sin(2.d0*pi*xyz(2))
 ! using numerical differentation instead of analytical solution to it more general
 !             
-             rhs(i,j,k,1:nVars)=0.
+             rhs(1:nVars,i,j,k)=0.
              !
              do idir=1,2+iins3d
                 !
@@ -1111,7 +987,7 @@ subroutine jacobiPointSolveOMP
                      +3.d0 / 2.d0*(data(3,1:nVars)+data(5,1:nVars))&
                      -49.d0/18.d0*(data(4,1:nVars)))/(smallNumber*smallNumber)
                 !
-                rhs(i,j,k,1:nVars)=rhs(i,j,k,1:nVars)+phixx(1:nVars)
+                rhs(1:nVars,i,j,k)=rhs(1:nVars,i,j,k)+phixx(1:nVars)
                 !
              end do
              !
@@ -1126,8 +1002,8 @@ subroutine jacobiPointSolveOMP
     !
     implicit none
     !
-    Real*8, intent(in)     ::   data  (il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars)
-    Real*8, intent(out)    ::   rhstmp(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars)
+    Real*8, intent(in)     ::   data  (1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
+    Real*8, intent(out)    ::   rhstmp(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
     ! local
     Integer                ::   i,j,k
     Real*8                 ::   vec_tmp(1:nVars)
@@ -1138,31 +1014,31 @@ subroutine jacobiPointSolveOMP
           !
           do i=il_bnd+nguard,iu_bnd-nguard
              !
-             rhstmp(i,j,k,1:nVars)=0.d0
+             rhstmp(1:nvars,i,j,k)=0.d0
              !
              ! i,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(1,i,j,k,1:nVars,1:nVars),data(i,j,k,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,1,i,j,k),data(1:nvars,i,j,k))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)
              ! i-1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(2,i,j,k,1:nVars,1:nVars),data(i-1,j,k,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),data(1:nVars,i-1,j,k))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)
              ! i+1,j,k
-             vec_tmp(1:nVars)=matmul(matLHS(3,i,j,k,1:nVars,1:nVars),data(i+1,j,k,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),data(1:nVars,i+1,j,k))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)
              ! i,j-1,k
-             vec_tmp(1:nVars)=matmul(matLHS(4,i,j,k,1:nVars,1:nVars),data(i,j-1,k,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),data(1:nVars,i,j-1,k))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)
              ! i,j+1,k
-             vec_tmp(1:nVars)=matmul(matLHS(5,i,j,k,1:nVars,1:nVars),data(i,j+1,k,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)                   
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),data(1:nVars,i,j+1,k))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)                   
              !
 #if (iins3d==1)
              ! i,j,k-1
-             vec_tmp(1:nVars)=matmul(matLHS(6,i,j,k,1:nVars,1:nVars),data(i,j,k-1,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),data(1:nVars,i,j,k-1))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)
              ! i,j,k+1
-             vec_tmp(1:nVars)=matmul(matLHS(7,i,j,k,1:nVars,1:nVars),data(i,j,k+1,1:nVars))
-             rhstmp(i,j,k,1:nVars)=rhstmp(i,j,k,1:nVars)-vec_tmp(1:nVars)                   
+             vec_tmp(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),data(1:nVars,i,j,k+1))
+             rhstmp(1:nvars,i,j,k)=rhstmp(1:nvars,i,j,k)-vec_tmp(1:nVars)                   
 #endif
              !
           end do
@@ -1198,11 +1074,11 @@ subroutine jacobiPointSolveOMP
           if (BCType(bid).eq.1) then
              !
              !
-             call dirichletBC(sol(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars),nVars,i1,i2,j1,j2,k1,k2,dd)
+             call dirichletBC(sol(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd),nVars,i1,i2,j1,j2,k1,k2,dd)
              !
           else if (BCType(bid).eq.2) then
              !
-             call neumannBC(sol(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nVars),nVars,i1,i2,j1,j2,k1,k2,dd,idir)
+             call neumannBC(sol(1:nVars,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd),nVars,i1,i2,j1,j2,k1,k2,dd,idir)
              !
           else
              !
@@ -1221,7 +1097,7 @@ subroutine jacobiPointSolveOMP
     !
     implicit none
     !
-    Real*8, intent(inout)   :: data(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nv)
+    Real*8, intent(inout)   :: data(1:nv,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
     Integer, intent(in)     :: nv,i1,i2,j1,j2,k1,k2,dd
     ! local
     Integer                 :: i,j,k
@@ -1233,7 +1109,7 @@ subroutine jacobiPointSolveOMP
              !
              xyz(1:3)=coords(i,j,k,1:3)
              !
-             call userSpecifiedFunction(data(i,j,k,1:nv),nv,xyz(1:3),Lx,Ly,Lz)
+             call userSpecifiedFunction(data(1:nv,i,j,k),nv,xyz(1:3),Lx,Ly,Lz)
              !
           end do
        end do
@@ -1245,7 +1121,7 @@ subroutine jacobiPointSolveOMP
     !
     implicit none
     !
-    Real*8, intent(inout)   :: data(il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd,1:nv)
+    Real*8, intent(inout)   :: data(1:nv,il_bnd:iu_bnd,jl_bnd:ju_bnd,kl_bnd:ku_bnd)
     Integer, intent(in)     :: nv,i1,i2,j1,j2,k1,k2,dd,dir
     ! local
     Integer                 :: i,j,k
@@ -1270,7 +1146,7 @@ subroutine jacobiPointSolveOMP
              kloc=1
 #endif
              !
-             data(i,j,k,1:nv)=data(iloc,jloc,kloc,1:nv)
+             data(1:nv,i,j,k)=data(1:nv,iloc,jloc,kloc)
              !
           end do
        end do
