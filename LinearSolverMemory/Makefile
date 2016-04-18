@@ -2,9 +2,9 @@
 # MAKEFILE for IIMS
 #----------------------------------------------------------------------------------------------------------------------------------#
 # FORTRAN FLAGS:
-#FFLAG   =  -O3  -g -cpp -finit-real=nan -Wall -ffree-line-length-none -fdefault-real-8 -fdefault-double-8
+FFLAG   =  -O3  -fopenmp  -g -cpp -finit-real=nan -Wall -ffree-line-length-none -fdefault-real-8 -fdefault-double-8 -w
 # DEBUG
-FFLAG   =  -O0 -fbacktrace -fbounds-check -g -cpp -finit-real=nan
+#FFLAG   =  -O0 -fbacktrace -fbounds-check -g -cpp -finit-real=nan
 #----------------------------------------------------------------------------------------------------------------------------------#
 # LIBRARIES:
 LIBS = 

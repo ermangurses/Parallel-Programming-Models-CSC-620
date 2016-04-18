@@ -1,6 +1,7 @@
 #include "setup.h"
 module LinearSolver
   !
+  use omp_lib  
   use dimensions, only: coords,Lx,Ly,Lz,&
        dx,dy,dz,nguard,&
        nxb,nyb,nzb,&
@@ -67,15 +68,30 @@ contains
     !
     implicit none
     !
+    Real*8         ::     fstart, fend
+    Real*8         ::     ostart,oend      
     Integer,intent(in)    ::    scheme
     !
     if (scheme.eq.1) then
        !
+       call cpu_time (fstart)
        call jacobiPointSolve
+       call cpu_time (fend)
+       write(*,*) 'Fortran CPU time elapsed', fend-fstart
        !
     else if (scheme.eq.2) then
        !
        call jacobiLineSolve
+       !
+    else if (scheme.eq.3) then
+       !
+       call omp_set_num_threads(  2 )
+       write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
+       write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
+       ostart = omp_get_wtime()
+       call jacobiPointSolveOMP
+       oend = omp_get_wtime() 
+       write(*,*) 'OpenMP Walltime elapsed', oend-ostart 
        !
     else
        !
@@ -86,6 +102,108 @@ contains
     !
   end subroutine solve
   !
+    subroutine jacobiPointSolveOMP
+    !
+    implicit none
+    real*8             ::  solm1  (1:nVars,1:nxb+2*nguard,nyb+2*nguard,nzb+2*nguard*iins3d)
+    real*8             ::  l2norm (1:nVars),linfnorm (1:nVars),dsol(1:nVars)
+    real*8             ::  rhstmp2(1:nVars)
+    real*8             ::  vec_tmp1(1:nVars)
+    real*8             ::  vec_tmp2(1:nVars) 
+    real*8             ::  vec_tmp3(1:nVars)
+    real*8             ::  vec_tmp4(1:nVars) 
+    real*8             ::  vec_tmp5(1:nVars)
+    real*8             ::  vec_tmp6(1:nVars)      
+    real*8             ::  sol_tmp(1:nVars)
+    real*8             ::  Dinv(1:nVars,1:nVars)
+    integer            ::  i,j,k,b,iter,v
+    !
+    do iter=1,maxIt
+       !
+       solm1(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)=sol(1:nVars,1:nxb+2*nguard,1:nyb+2*nguard,1:nzb+2*nguard*iins3d)
+       !
+       l2norm(1:nVars)=0.d0
+       !
+       !$omp& shared (nVars, rhstmp2, solm1, matLHS)
+       !$omp& private (i,j,k, Dinv, Bmat, vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6)  
+                 !$omp  parallel do                     
+       do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
+          !
+          do j=jl_bnd+nguard,ju_bnd-nguard
+             !
+             do i=il_bnd+nguard,iu_bnd-nguard
+                ! invert diagonal block
+                call inv(matLHS(1:nVars,1:nVars,1,i,j,k),Dinv(1:nVars,1:nVars),nVars)
+                ! compute modified rhs
+                rhstmp2(1:nVars)=rhs(1:nVars,i,j,k)
+                !
+                ! i-1,j,k
+                vec_tmp1(1:nVars)=matmul(matLHS(1:nVars,1:nVars,2,i,j,k),solm1(1:nVars,i-1,j,k))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                !
+                ! i+1,j,k
+                vec_tmp2(1:nVars)=matmul(matLHS(1:nVars,1:nVars,3,i,j,k),solm1(1:nVars,i+1,j,k))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                !
+                ! i,j-1,k
+                vec_tmp3(1:nVars)=matmul(matLHS(1:nVars,1:nVars,4,i,j,k),solm1(1:nVars,i,j-1,k))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                !
+                ! i,j+1,k
+                vec_tmp4(1:nVars)=matmul(matLHS(1:nVars,1:nVars,5,i,j,k),solm1(1:nVars,i,j+1,k))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                !
+#if (iins3d==1)
+                ! i,j,k-1
+                vec_tmp5(1:nVars)=matmul(matLHS(1:nVars,1:nVars,6,i,j,k),solm1(1:nVars,i,j,k-1))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)
+                ! i,j,k+1
+                vec_tmp6(1:nVars)=matmul(matLHS(1:nVars,1:nVars,7,i,j,k),solm1(1:nVars,i,j,k+1))
+                !rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp(1:nVars)                      
+#endif
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp1(1:nVars)&
+                                                 -vec_tmp2(1:nVars)&
+                                                 -vec_tmp3(1:nVars)&
+                                                 -vec_tmp4(1:nVars)
+#if (iins3d==1)                                                 
+                rhstmp2(1:nVars)=rhstmp2(1:nVars)-vec_tmp5(1:nVars)&
+                                                 -vec_tmp6(1:nVars)
+#endif                
+                !
+                sol_tmp(1:nVars)=matmul(Dinv(1:nVars,1:nVars),rhstmp2(1:nVars))
+                !
+                dsol(1:nVars)=sol_tmp(1:nVars)-solm1(1:nvars,i,j,k)
+                !
+#if (OUTPUTRES==1)
+                do v=1,nVars
+                   l2norm  (v)=l2norm  (v)+dsol(v)*dsol(v)
+!                   linfnorm(v)=max(linfnorm(v),abs(dsol(v)))
+                enddo
+#endif
+                !
+                sol (1:nvars,i,j,k)=solm1(1:nvars,i,j,k)+relaxFactor*dsol(1:nVars)
+                !
+             end do
+          end do
+       end do
+          !$omp end parallel do                
+       !
+       call exchange_ghosts
+       !
+#if (OUTPUTRES==1)
+       do v=1,nVars
+          l2norm  (v)=sqrt(l2norm(v)/nVars)
+       enddo
+       !
+       write(funitLin,*) iter,l2norm(1:nVars)!,linfnorm(1:nVars)
+#endif
+       !
+    enddo
+    
+    !
+  end subroutine jacobiPointSolveOMP
+  
+  
   subroutine jacobiPointSolve
     !
     implicit none
