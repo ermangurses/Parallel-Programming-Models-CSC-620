@@ -8,8 +8,6 @@ program linSolve
   !
   implicit none
   !
-  Real*8         ::     fstart, fend
-  Real*8         ::     ostart,oend  
   Integer        ::     k,ioerror,scheme
   Integer        ::     maxIterations
   Real*8         ::     errorTolerance
@@ -112,15 +110,9 @@ program linSolve
   ! solve linear system
   write(*,'(A)') "[I] Solve linear system"
 #if (RHSTEST==0)
-   call cpu_time (fstart)
-   ostart = omp_get_wtime()
    !
    call solve(scheme)
    !
-   call cpu_time (fend)
-   oend = omp_get_wtime()
-   write(*,*) 'Fortran CPU time elapsed', fend-fstart
-   write(*,*) 'OpenMP Walltime elapsed', oend-ostart  
 #endif
   !
   ! output results to tecplot file
