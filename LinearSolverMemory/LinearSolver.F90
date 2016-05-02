@@ -85,7 +85,7 @@ contains
        !
     else if (scheme.eq.3) then
        !
-       call omp_set_num_threads(  2 )
+       call omp_set_num_threads(2)
        write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
        write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
        ostart = omp_get_wtime()
@@ -124,8 +124,8 @@ contains
        !
        l2norm(1:nVars)=0.d0
        !
-       !$omp& shared (nVars, rhstmp2, solm1, matLHS)
-       !$omp& private (i,j,k, Dinv, Bmat, vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6)  
+       !$omp& shared (rhstmp2, solm1, matLHS, rhs, vec_tmp1, vec_tmp2, vec_tmp3, vec_tmp4, vec_tmp5, vec_tmp6)
+       !$omp& private (i,j,k, Dinv,nVars)  
                  !$omp  parallel do                     
        do k=kl_bnd+nguard*iins3d,ku_bnd-nguard*iins3d
           !
@@ -186,7 +186,7 @@ contains
              end do
           end do
        end do
-          !$omp end parallel do                
+       !$omp end parallel do                
        !
        call exchange_ghosts
        !
@@ -198,8 +198,7 @@ contains
        write(funitLin,*) iter,l2norm(1:nVars)!,linfnorm(1:nVars)
 #endif
        !
-    enddo
-    
+    enddo    
     !
   end subroutine jacobiPointSolveOMP
   
