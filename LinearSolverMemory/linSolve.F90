@@ -1,12 +1,15 @@
 #include "setup.h"
 program linSolve
   !
+  use omp_lib
   use dimensions
   use LinearSolver, only: sol,assignSol,assignRHS,assignLHS,solve,solveLinearSystem_ini,&
                           error,errorOutput,evaluateRHS,rhs
   !
   implicit none
   !
+  Real*8         ::     fstart, fend
+  Real*8         ::     ostart,oend
   Integer        ::     k,ioerror,scheme
   Integer        ::     maxIterations
   Real*8         ::     errorTolerance
@@ -109,7 +112,10 @@ program linSolve
   ! solve linear system
   write(*,'(A)') "[I] Solve linear system"
 #if (RHSTEST==0)
+  ostart = omp_get_wtime()
   call solve(scheme)
+  oend = omp_get_wtime()
+  write(*,*) 'OpenMP Walltime elapsed', oend-ostart
 #endif
   !
   ! output results to tecplot file

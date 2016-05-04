@@ -2,8 +2,8 @@
 1,1,1,1,1,1    #boundary condition type left,right,bottom,top,front,back
 4              #number of variables
 1.0,1.0,1.0    #Lx,Ly,Lz
-400,400,20       #grid points in (x,y,z)-directions
+100,100,20       #grid points in (x,y,z)-directions
 4              #guard cells
-1            #maximum number of iterations
+100            #maximum number of iterations
 1e-6           #error tolerance
 0.9            #relaxation factor

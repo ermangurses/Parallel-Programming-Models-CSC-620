@@ -28,9 +28,9 @@ void prt (double *A, int neqs);
 
 int main() {
   int k, j, i;
-  int Nx = 50;
-  int Ny = 50;
-  int Nz = 50;
+  int Nx = 200;
+  int Ny = 200;
+  int Nz = 200;
   int blockX= 3;
   int blockY= 3;
   int blockSize = blockX * blockY;
@@ -45,9 +45,7 @@ int main() {
   M = (double*) malloc(requiredSpace);
   B = (double*) malloc(requiredSpace);
  
-  omp_set_num_threads(16); 
  
-  #pragma omp parallel for private(k,j,i) schedule(static) collapse(3)
   for( k = 0; k < Nz; k++){
     for( j = 0; j < Ny; j++){
       for( i = 0; i < Nx; i++){
@@ -65,7 +63,6 @@ int main() {
   } 
  double start_time = omp_get_wtime();
    
-  #pragma omp parallel for shared(start_time, Nx, Ny, Nz, M, B) private(k,j,i) schedule(static) collapse(3)
   for( k = 0; k < Nz; k++){
     for( j = 0; j < Ny; j++){
       for( i = 0; i < Nx; i++){
@@ -104,8 +101,8 @@ int main() {
 void inverse(double *A, double *B, int blockY){
 
   double * temp, *C;
-  temp = (double*) malloc(blockY);
-  C    = (double*) malloc(blockY*blockY);
+  temp = (double*) malloc(blockY*sizeof(double));
+  C    = (double*) malloc(blockY*blockY*sizeof(double));
 
   for (int j = 0;  j < blockY; j++){
     for ( int i = 0; i < blockY; i++){

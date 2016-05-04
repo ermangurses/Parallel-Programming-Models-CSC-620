@@ -73,10 +73,7 @@ contains
     Integer,intent(in)    ::    scheme
     !
     if (scheme.eq.1) then
-       call cpu_time (fstart)
        call jacobiPointSolve
-       call cpu_time (fend)
-       write(*,*) 'Fortran CPU time elapsed', fend-fstart
     else if (scheme.eq.2) then
        !
        call jacobiLineSolve
@@ -86,10 +83,7 @@ contains
        call omp_set_num_threads( 2 )
        write ( *, '(a,i8)' ) 'The number of processors available = ', omp_get_num_procs ( )
        write ( *, '(a,i8)' ) 'The number of threads available    = ', omp_get_max_threads ( )
-       ostart = omp_get_wtime()
        call jacobiPointSolveOMP
-       oend = omp_get_wtime() 
-       write(*,*) 'OpenMP Walltime elapsed', oend-ostart  
     else
        !
        write(*,'(A,I2)') "[E] LinearSolve::solve: Linear solver not supported! scheme = ",scheme
