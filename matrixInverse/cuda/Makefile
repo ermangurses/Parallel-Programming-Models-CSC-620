@@ -8,5 +8,7 @@ GENCODE_FLAGS   := $(GENCODE_SM20) $(GENCODE_SM30) $(GENCODE_SM35)
 
 OPTIONS_CUDA   := -O4 -ftz=false  $(GENCODE_FLAGS)
 
-all: cudaInverse.cu 
+cudaInverse: cudaInverse.cu 
 	$(NVCC) $^ -o  $@ $(OPTIONS_CUDA)
+clean:
+	rm cudaInverse
